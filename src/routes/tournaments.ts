@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { supabase } from '../libs/supabase'
 
-export const tournamentRoutes = new Hono()
+export const tournamentsRoutes = new Hono()
 
-tournamentRoutes.get('/', async (c) => {
+tournamentsRoutes.get('/', async (c) => {
   try {
     // 1️⃣ Get player ID from header
     const playerId = c.req.header('Authorization')
