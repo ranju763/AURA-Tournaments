@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
-import { userRoutes } from './routes/users'
+import { tournamentRoutes } from './routes/tournaments'
+
 import 'dotenv/config'
 
 const app = new Hono()
 
-app.route('/users', userRoutes)
+app.route('/tournaments',tournamentRoutes)
 app.get('/', (c) => c.text('Supabase + Hono API running ✔'))
 
 const PORT = process.env.PORT || 3000
