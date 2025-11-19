@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Win Probability</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --a: #22c55e;
+      --b: #3b82f6;
+      --bar-bg: #1e293b;
+      --text: #e2e8f0;
+      --accent: #06b6d4;
+    }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0; padding: 40px;
+      background: radial-gradient(1000px 800px at 30% -10%, #0b1220 0%, var(--bg) 40% 100%);
+      color: var(--text);
+    }
+    .card {
+      max-width: 750px; margin: 0 auto;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px 32px;
+      box-shadow: 0 8px 25px rgba(0,0,0,.35);
+    }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    label { width:68px; font-size:13px; color:#94a3b8; padding-top:8px; }
+    input {
+      flex:1 1 120px; min-width:120px;
+      padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.08);
+      background:#0b1020; color:var(--text);
+    }
+    button {
+      padding: 12px 18px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      color: white; font-weight:600; cursor:pointer;
+      box-shadow: 0 6px 18px rgba(14,165,233,.35);
+    }
+    button:active { transform: translateY(1px); }
+
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    h2 { margin: 0 0 16px; }
+
+    .bar-wrap { margin-top: 25px; text-align:center; }
+    .bar {
+      height: 26px; width: 100%; border-radius: 999px;
+      background: var(--bar-bg); overflow: hidden;
+      display:flex;
+    }
+    .fillA { background: var(--a); height: 100%; transition: width .4s ease; }
+    .fillB { background: var(--b); height: 100%; transition: width .4s ease; }
+    .labels { display:flex; justify-content:space-between; margin-top:6px; font-weight:600; }
+    .pct { font-weight:700; }
+    pre { background:#0a0f1a; color:#cbd5e1; padding:12px; border-radius:12px; margin-top:16px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📈 Live Win Probability (Shared Bar)</h2>
+
+    <div class="grid2">
+      <div>
+        <div class="row"><label>μA</label><input id="muA" value="27.5" /></div>
+        <div class="row"><label>σA</label><input id="sigmaA" value="3.0" /></div>
+        <div class="row"><label>ScoreA</label><input id="scoreA" value="6" /></div>
+      </div>
+      <div>
+        <div class="row"><label>μB</label><input id="muB" value="25.0" /></div>
+        <div class="row"><label>σB</label><input id="sigmaB" value="2.5" /></div>
+        <div class="row"><label>ScoreB</label><input id="scoreB" value="8" /></div>
+      </div>
+    </div>
+
+    <button onclick="calc()">Compute</button>
+
+    <div class="bar-wrap" style="display:none" id="viz">
+      <div class="bar">
+        <div id="fillA" class="fillA" style="width:50%"></div>
+        <div id="fillB" class="fillB" style="width:50%"></div>
+      </div>
+      <div class="labels">
+        <span>Team A <span class="pct" id="pctA">—%</span></span>
+        <span>Team B <span class="pct" id="pctB">—%</span></span>
+      </div>
+    </div>
+
+    <pre id="output" style="display:none"></pre>
+  </div>
+
+  <script>
+    function fmtPct(x){ return (x*100).toFixed(1) + '%'; }
+
+    async function calc(){
+      const payload = {
+        muA: parseFloat(muA.value),
+        sigmaA: parseFloat(sigmaA.value),
+        muB: parseFloat(muB.value),
+        sigmaB: parseFloat(sigmaB.value),
+        scoreA: parseInt(scoreA.value,10),
+        scoreB: parseInt(scoreB.value,10)
+      };
+
+      const res = await fetch("http://127.0.0.1:5000/live_probability", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      const pA = Number(data.p_a ?? 0.5);
+      const pB = Number(data.p_b ?? (1 - pA));
+
+      const pctA = Math.max(0, Math.min(100, pA*100));
+      const pctB = 100 - pctA;
+
+      document.getElementById('viz').style.display = 'block';
+      document.getElementById('output').style.display = 'block';
+      document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+
+      const fillA = document.getElementById('fillA');
+      const fillB = document.getElementById('fillB');
+      fillA.style.width = pctA + '%';
+      fillB.style.width = pctB + '%';
+      document.getElementById('pctA').textContent = fmtPct(pA);
+      document.getElementById('pctB').textContent = fmtPct(pB);
+    }
+  </script>
+</body>
+</html>

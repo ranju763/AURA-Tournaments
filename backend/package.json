@@ -6,11 +6,16 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.81.1",
     "dotenv": "^17.2.3",
-    "hono": "^4.10.6"
+    "hono": "^4.10.6",
+    "ioredis": "^5.8.2",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
-  }
+  },
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true
 }

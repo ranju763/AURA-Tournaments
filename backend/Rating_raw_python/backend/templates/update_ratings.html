@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Update Ratings 2v2</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f8f9fa; color: #111; }
+    h2 { margin-top: 0; }
+    input { width: 80px; padding: 6px; margin: 4px; }
+    button { padding: 10px 16px; background: #ffc107; color: #111; border: none; border-radius: 6px; cursor: pointer; }
+    button:active { transform: translateY(1px); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .section { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; background:#fff; }
+    th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    th { background:#f2f4f7; }
+  </style>
+</head>
+<body>
+  <h2>🏓 Update Ratings After Match (2v2)</h2>
+
+  <div class="grid">
+    <div class="section">
+      <h4>Team A</h4>
+      <div class="row">μ₁ <input id="a1mu" value="25"> σ₁ <input id="a1sig" value="8"></div>
+      <div class="row">μ₂ <input id="a2mu" value="26"> σ₂ <input id="a2sig" value="8"></div>
+    </div>
+    <div class="section">
+      <h4>Team B</h4>
+      <div class="row">μ₃ <input id="b1mu" value="23"> σ₃ <input id="b1sig" value="9"></div>
+      <div class="row">μ₄ <input id="b2mu" value="24"> σ₄ <input id="b2sig" value="7"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h4>Scores</h4>
+    <div class="row">
+      ScoreA <input id="scoreA" value="11">
+      ScoreB <input id="scoreB" value="9">
+      <button onclick="update()">Update Ratings</button>
+    </div>
+  </div>
+
+  <table id="summary" style="display:none">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Team</th>
+        <th>μ (Mean)</th>
+        <th>σ (Std Dev)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    function rowHTML(name, team, mu, sigma){
+      return `
+        <tr>
+          <td>${name}</td>
+          <td>${team}</td>
+          <td>${mu.toFixed(3)}</td>
+          <td>${sigma.toFixed(3)}</td>
+        </tr>`;
+    }
+
+    async function update(){
+      const payload = {
+        teamA: [
+          {mu: parseFloat(a1mu.value), sigma: parseFloat(a1sig.value)},
+          {mu: parseFloat(a2mu.value), sigma: parseFloat(a2sig.value)}
+        ],
+        teamB: [
+          {mu: parseFloat(b1mu.value), sigma: parseFloat(b1sig.value)},
+          {mu: parseFloat(b2mu.value), sigma: parseFloat(b2sig.value)}
+        ],
+        scoreA: parseInt(scoreA.value, 10),
+        scoreB: parseInt(scoreB.value, 10)
+      };
+
+      const res = await fetch("http://127.0.0.1:5000/update_ratings", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      const tbody = document.querySelector("#summary tbody");
+      tbody.innerHTML = "";
+
+      const A1 = data.teamA_new?.[0];
+      const A2 = data.teamA_new?.[1];
+      const B1 = data.teamB_new?.[0];
+      const B2 = data.teamB_new?.[1];
+
+      if (A1 && A2 && B1 && B2) {
+        tbody.insertAdjacentHTML("beforeend", rowHTML("A1", "A", Number(A1.mu), Number(A1.sigma)));
+        tbody.insertAdjacentHTML("beforeend", rowHTML("A2", "A", Number(A2.mu), Number(A2.sigma)));
+        tbody.insertAdjacentHTML("beforeend", rowHTML("B1", "B", Number(B1.mu), Number(B1.sigma)));
+        tbody.insertAdjacentHTML("beforeend", rowHTML("B2", "B", Number(B2.mu), Number(B2.sigma)));
+        document.getElementById("summary").style.display = "table";
+      } else {
+        alert("Unexpected response format from server.");
+      }
+    }
+  </script>
+</body>
+</html>
