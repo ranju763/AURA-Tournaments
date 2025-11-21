@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Deep Dive Algo Viz</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Matrix Styles */
+        .matrix-cell { width: 25px; height: 25px; font-size: 10px; text-align: center; padding:0; border: 1px solid #eee;}
+        .cell-blocked { background-color: #ffcccc; color: #990000; }
+        .cell-open { background-color: #e6fffa; color: #0a0; }
+        .cell-self { background-color: #6c757d; }
+        
+        /* Trace/Log Styles */
+        .step-box { border-left: 3px solid #ddd; padding-left: 15px; margin-bottom: 10px; }
+        .step-valid { border-left-color: #198754; }
+        .step-invalid { border-left-color: #dc3545; opacity: 0.7; }
+        .mono { font-family: monospace; font-size: 0.9em; }
+        
+        .opt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 2px 0;}
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>🧠 Algorithm "Brain" Visualization</h1>
+        <span class="badge bg-primary fs-5" id="round-counter">Round 0 / 5</span>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body d-flex gap-3">
+            <button id="next-round-btn" class="btn btn-success btn-lg flex-grow-1">▶ Run Next Round</button>
+            <button id="reset-btn" class="btn btn-outline-danger">Reset</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6">
+            <div id="matches-container"></div>
+
+            <div id="trace-container"></div>
+        </div>
+
+        <div class="col-lg-6">
+             <div id="leaderboard-container"></div>
+
+            <div id="matrix-container"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- API ENDPOINTS ---
+    const API_DASHBOARD = '/api/dashboard';
+    const API_NEXT_ROUND = '/api/next_round';
+    const API_RESET = '/api/reset';
+
+    // --- DOM REFERENCES ---
+    const roundCounter = document.getElementById('round-counter');
+    const nextRoundBtn = document.getElementById('next-round-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const matchesContainer = document.getElementById('matches-container');
+    const traceContainer = document.getElementById('trace-container');
+    const leaderboardContainer = document.getElementById('leaderboard-container');
+    const matrixContainer = document.getElementById('matrix-container');
+
+    // --- HELPER FUNCTIONS ---
+
+    async function fetchData(url, method = 'GET') {
+        const response = await fetch(url, { method });
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+        return response.json();
+    }
+
+    // --- RENDERING FUNCTIONS ---
+
+    function renderMatches(data) {
+        if (data.matches.length === 0) {
+            matchesContainer.innerHTML = '';
+            return;
+        }
+
+        let html = `
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Final Output (The Matches)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-bordered align-middle mb-0 text-center">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Team A</th>
+                                <th>Avg</th>
+                                <th>Vs</th>
+                                <th>Avg</th>
+                                <th>Team B</th>
+                                <th>Diff</th>
+                                <th>Winner</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        data.matches.forEach(m => {
+            const isSeedA = m.t1.includes(m.seed);
+            const isSeedB = m.t2.includes(m.seed);
+
+            html += `
+                <tr>
+                    <td class="fw-bold">
+                        ${isSeedA ? '<span class="badge bg-warning text-dark" style="font-size:0.6em">SEED</span>' : ''}
+                        ${m.t1.join(' & ')}
+                    </td>
+                    <td class="text-muted">${m.t1_avg}</td>
+                    <td>vs</td>
+                    <td class="text-muted">${m.t2_avg}</td>
+                    <td class="fw-bold">
+                        ${isSeedB ? '<span class="badge bg-warning text-dark" style="font-size:0.6em">SEED</span>' : ''}
+                        ${m.t2.join(' & ')}
+                    </td>
+                    <td><span class="badge bg-light text-dark border">${m.diff}</span></td>
+                    <td><span class="badge bg-${m.winner === 'Team A' ? 'success' : 'info'}">${m.winner}</span></td>
+                </tr>
+            `;
+        });
+        html += `</tbody></table></div></div>`;
+        matchesContainer.innerHTML = html;
+    }
+
+    function renderTrace(data) {
+        if (!data.trace || data.trace.length === 0) {
+            traceContainer.innerHTML = '';
+            return;
+        }
+
+        let html = `
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">🔍 Step-by-Step Algorithm Process (Round ${data.round})</h5>
+                </div>
+                <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+        `;
+
+        data.trace.forEach((t, tIndex) => {
+            html += `
+                <div class="mb-4">
+                    <h6 class="fw-bold text-primary border-bottom pb-2">Match #${tIndex + 1}: The "${t.seed}" Match</h6>
+                    <div class="ps-2">
+            `;
+            t.steps.forEach(step => {
+                if (step.type === 'check') {
+                    const statusClass = step.status === 'valid' ? 'step-valid' : 'step-invalid';
+                    const badgeClass = step.status === 'valid' ? 'bg-success' : 'bg-danger';
+                    const textClass = step.status === 'valid' ? 'text-success' : 'text-danger';
+
+                    html += `
+                        <div class="step-box ${statusClass}">
+                            <div class="d-flex justify-content-between">
+                                <span class="mono">${step.group}</span>
+                                <span class="badge ${badgeClass}">${step.status.toUpperCase()}</span>
+                            </div>
+                            <small class="${textClass}">${step.msg}</small>
+                        </div>
+                    `;
+                }
+            });
+            html += `</div></div>`;
+        });
+        html += `</div></div>`;
+        traceContainer.innerHTML = html;
+    }
+
+    function renderLeaderboard(data) {
+        let html = `
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">🏆 Leaderboard</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Rating</th>
+                                <th>Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        data.players.forEach((p, index) => {
+            html += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${p.name}</td>
+                    <td>${p.rating}</td>
+                    <td class="fw-bold">${p.points.toFixed(1)}</td>
+                </tr>
+            `;
+        });
+        html += `</tbody></table></div></div>`;
+        leaderboardContainer.innerHTML = html;
+    }
+
+    function renderMatrix(data) {
+        // Prepare matrix data based on player names and history
+        const playerNames = data.players.map(p => p.name);
+        
+        const matrixData = data.players.map(p1 => {
+            const row = { p_name: p1.name, cells: [] };
+            data.players.forEach(p2 => {
+                let cellType = 'open';
+                if (p1.id === p2.id) {
+                    cellType = 'self';
+                } 
+                // Checks if p1's teammate_history array (which holds IDs) includes p2's ID
+                else if (p1.teammate_history.includes(p2.id)) { 
+                    cellType = 'blocked';
+                }
+                row.cells.push(cellType);
+            });
+            return row;
+        });
+
+        let html = `
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">🚫 Constraint Matrix (Teammate History)</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm mx-auto" style="width: auto;">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    ${playerNames.map(name => `<th style="font-size: 9px;">${name}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+        matrixData.forEach(row => {
+            html += `
+                <tr>
+                    <th style="font-size: 9px;" class="align-middle">${row.p_name}</th>
+                    ${row.cells.map(cell => `
+                        <td class="matrix-cell cell-${cell}">
+                            ${cell === 'self' ? '' : cell === 'blocked' ? 'X' : ''}
+                        </td>
+                    `).join('')}
+                </tr>
+            `;
+        });
+        html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small mt-2 mb-0">X = Blocked | Blank = Open</p>
+                </div>
+            </div>
+        `;
+        matrixContainer.innerHTML = html;
+    }
+
+    // --- MAIN CONTROLLER ---
+
+    function updateDashboard(data) {
+        // Update header
+        roundCounter.textContent = `Round ${data.round} / ${data.max_rounds}`;
+
+        // Update buttons
+        if (data.finished) {
+            nextRoundBtn.disabled = true;
+            nextRoundBtn.textContent = 'Tournament Complete';
+            nextRoundBtn.classList.remove('btn-success');
+            nextRoundBtn.classList.add('btn-secondary');
+        } else {
+            nextRoundBtn.disabled = false;
+            nextRoundBtn.textContent = `▶ Run Next Round`;
+            nextRoundBtn.classList.remove('btn-secondary');
+            nextRoundBtn.classList.add('btn-success');
+        }
+
+        // Render sections
+        renderMatches(data);
+        renderTrace(data);
+        renderLeaderboard(data);
+        renderMatrix(data);
+    }
+
+    // --- EVENT LISTENERS ---
+
+    nextRoundBtn.addEventListener('click', async () => {
+        try {
+            nextRoundBtn.disabled = true; // Disable during fetch
+            const data = await fetchData(API_NEXT_ROUND, 'POST');
+            updateDashboard(data);
+        } catch (error) {
+            alert('Error running next round: ' + error.message);
+        } finally {
+            nextRoundBtn.disabled = false;
+        }
+    });
+
+    resetBtn.addEventListener('click', async () => {
+        if (confirm('Are you sure you want to reset the tournament?')) {
+            try {
+                const data = await fetchData(API_RESET, 'POST');
+                updateDashboard(data);
+            } catch (error) {
+                alert('Error resetting tournament: ' + error.message);
+            }
+        }
+    });
+
+    // --- INITIAL LOAD ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const data = await fetchData(API_DASHBOARD);
+            updateDashboard(data);
+        } catch (error) {
+            document.body.innerHTML = '<h1 class="text-danger">Error Loading Data</h1><p>Please check your Bun server and ensure the paths in your `pairing.ts` file are correct.</p>';
+            console.error(error);
+        }
+    });
+</script>
+
+</body>
+</html>
